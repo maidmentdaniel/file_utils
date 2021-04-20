@@ -9,12 +9,40 @@ import shutil
 import uuid
 from progress.bar import Bar
 import shutil
+import time
 
 formatlist = ('avi', 'mkv', 'mp4', 'dav')
 
-def extractImages(pathIn, pathOut, vidnm, frame_skip = 1):
+def update_progress(label, progress):
+    barLength = 10 # Modify this to change the length of the progress bar
+    status = ""
+    if isinstance(progress, int):
+        progress = float(progress)
+    if not isinstance(progress, float):
+        progress = 0
+        status = "error: progress var must be float\r\n"
+    if progress < 0:
+        progress = 0
+        status = "Halt...\r\n"
+    if progress >= 1:
+        progress = 1
+        status = "Done...\r\n"
+    block = int(round(barLength*progress))
+    text = "\r{0}: [{1}] {2}% {3}".format(label, "#"*block + "-"*(barLength-block), round(progress*100, 4), status)
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+def extractImages(pathIn, pathOut, vidnm):
     count = 0
     N = get_frame_count(pathIn)
+    if(N < 10):
+        frame_skip = 1
+    elif(10 <= N < 100):
+        frame_skip = 2
+    elif(100 <= N < 1000):
+        frame_skip = 20
+    else:
+        frame_skip = 50
     bar = Bar("Extracting", max=N)
     vidcap = cv2.VideoCapture(pathIn)
     while(vidcap.grab()):
@@ -58,20 +86,24 @@ def src_extract(src_ls, target_dir):
             print(src_dir, 'is not a path')
             sys.exit(0)
     for src in src_ls:
-        print(len(os.listdir(src)))
+        length = len(os.listdir(src))
+        print(length)
         print(f"{join(*src.split('/')[-2:])}")
-        # bar = Bar("Processing", max=len(os.listdir(src)))
+        count = 0
         for entry in os.scandir(src):
             if(entry.is_file()):
-                id = str(uuid.uuid4())
-                os.mkdir(join(target_dir, id))
-                target_path = join(target_dir, id)
-                print("Processing", entry.name, '\nas', id)
-                extractImages(entry.path, target_path, id, 1)
-                ftype = entry.name.split('.')[-1]
-                print("Copying", entry.name, 'to', join(src, id+'.'+ftype))
-                shutil.copy(entry.path, join(src, id+'.'+ftype))
-    return None
+                if(not os.path.isdir(join(target_dir, entry.name.split('.')[0]))):
+                    id = str(uuid.uuid4())
+                    os.mkdir(join(target_dir, id))
+                    target_path = join(target_dir, id)
+                    print("Processing", entry.name, '\nas', id, '\n')
+                    extractImages(entry.path, target_path, id)
+                    ftype = entry.name.split('.')[-1]
+                    print("Copying", entry.name, 'to:\n', join(src, id+'.'+ftype), '\n')
+                    shutil.move(entry.path, join(src, id+'.'+ftype))
+            count += 1
+            update_progress("Files Processed", count/length)
+    return True
 
 
 
